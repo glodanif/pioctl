@@ -118,9 +118,9 @@ impl<'a> Dispatcher<'a> {
         const ICON_SEP: &str = "\u{2003}";
 
         let title = format!("Applying profile: {}\n\u{00A0}", profile.name);
-        let monitors_pending = format!("{}{}Monitors setup", ICON_LOADING, ICON_SEP);
-        let audio_pending = format!("{}{}Audio setup", ICON_LOADING, ICON_SEP);
-        let desktop_pending = format!("{}{}Desktop setup", ICON_LOADING, ICON_SEP);
+        let monitors_pending = format!("{}{}Monitors", ICON_LOADING, ICON_SEP);
+        let audio_pending = format!("{}{}Audio", ICON_LOADING, ICON_SEP);
+        let desktop_pending = format!("{}{}Desktop", ICON_LOADING, ICON_SEP);
 
         let notification_id = self
             .notifications_manager
@@ -136,9 +136,9 @@ impl<'a> Dispatcher<'a> {
             )
             .ok();
 
-        if let Some(delay) = profile.initial_to_monitors_delay_ms {
+        if let Some(delay) = profile.monitors_config.delay_before_ms {
             if self.dry_run {
-                println!("[DRY RUN] Initial-to-Monitors delay: {}ms", delay);
+                println!("[DRY RUN] Delay before setting monitors config: {}ms", delay);
             } else {
                 thread::sleep(Duration::from_millis(delay as u64));
             }
@@ -152,7 +152,7 @@ impl<'a> Dispatcher<'a> {
         } else {
             ICON_ERROR
         };
-        let monitors_done = format!("{}{}Monitors setup", monitors_icon, ICON_SEP);
+        let monitors_done = format!("{}{}Monitors", monitors_icon, ICON_SEP);
 
         match monitors_result {
             Ok(_) => {
@@ -184,9 +184,9 @@ impl<'a> Dispatcher<'a> {
             self.dry_run,
         );
 
-        if let Some(delay) = profile.monitors_to_audio_delay_ms {
+        if let Some(delay) = profile.audio_sinks_config.delay_before_ms {
             if self.dry_run {
-                println!("[DRY RUN] Monitors-to-Audio delay: {}ms", delay);
+                println!("[DRY RUN] Delay before settings audio sinks config: {}ms", delay);
             } else {
                 thread::sleep(Duration::from_millis(delay as u64));
             }
@@ -198,8 +198,8 @@ impl<'a> Dispatcher<'a> {
         } else {
             ICON_ERROR
         };
-        let audio_done = format!("{}{}Audio setup", audio_icon, ICON_SEP);
-        let desktop_done = format!("{}{}Desktop setup", ICON_CHECK, ICON_SEP);
+        let audio_done = format!("{}{}Audio", audio_icon, ICON_SEP);
+        let desktop_done = format!("{}{}Desktop", ICON_CHECK, ICON_SEP);
 
         match audio_result {
             Ok(_) => {
@@ -214,6 +214,14 @@ impl<'a> Dispatcher<'a> {
             }
             Err(err) => {
                 eprintln!("Warning: Failed to update audio sinks {}", err);
+            }
+        }
+
+        if let Some(delay) = profile.desktop_config.delay_before_ms {
+            if self.dry_run {
+                println!("[DRY RUN] Delay before setting desktop config: {}ms", delay);
+            } else {
+                thread::sleep(Duration::from_millis(delay as u64));
             }
         }
 

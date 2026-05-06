@@ -166,7 +166,7 @@ impl<'a> ProfilesManager<'a> {
         profile: &Profile,
         available_displays: Vec<Monitor>,
     ) -> Option<ValidationError> {
-        for monitor_config in &profile.monitors_config {
+        for monitor_config in &profile.monitors_config.monitors {
             let matching_display = available_displays
                 .iter()
                 .find(|d| d.name == monitor_config.name);
@@ -237,7 +237,7 @@ impl<'a> ProfilesManager<'a> {
                 }
 
                 if !profile
-                    .monitors_config
+                    .monitors_config.monitors
                     .iter()
                     .any(|m| &m.name == mirror_source)
                 {
@@ -251,7 +251,7 @@ impl<'a> ProfilesManager<'a> {
         }
 
         if let Some(sink) = profile
-            .audio_sinks_config
+            .audio_sinks_config.audio_sinks
             .iter()
             .find(|sink| sink.volume > 150)
         {

@@ -39,7 +39,7 @@ impl AudioManager for PipeWireAudioManager {
     }
 
     fn set_audio_sinks(&self, profile: &Profile, dry_run: bool) -> Result<(), AudioError> {
-        for sink in &profile.audio_sinks_config {
+        for sink in &profile.audio_sinks_config.audio_sinks {
             let prefix = &sink.sink_name;
             let attempts = 10;
             let mut success = false;

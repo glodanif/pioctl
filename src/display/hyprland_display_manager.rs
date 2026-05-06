@@ -162,7 +162,7 @@ impl DisplayManager for HyprlandManager {
 
     fn set_monitors_profile(&self, profile: &Profile, dry_run: bool) -> Result<(), DisplayError> {
         let mut any_disabled = false;
-        for monitor in &profile.monitors_config {
+        for monitor in &profile.monitors_config.monitors {
             if !monitor.is_enabled {
                 let config = format!("{},disable", monitor.name);
                 match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
@@ -194,14 +194,16 @@ impl DisplayManager for HyprlandManager {
                 }
             }
         }
-        if any_disabled {
+
+        if any_disabled && let Some(delay) = profile.monitors_config.disabled_to_enabled_delay_ms {
             if dry_run {
-                println!("[DRY RUN] Disabling-to-Enabling delay: 500ms");
+                println!("[DRY RUN] Disabling-to-Enabling delay: {}ms", delay);
             } else {
-                thread::sleep(Duration::from_millis(500));
+                thread::sleep(Duration::from_millis(delay as u64));
             }
         }
-        for monitor in &profile.monitors_config {
+
+        for monitor in &profile.monitors_config.monitors {
             if monitor.is_enabled {
                 let config = format!(
                     "{},{}x{}@{},{}x{},{}",
