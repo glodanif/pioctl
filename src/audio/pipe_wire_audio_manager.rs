@@ -1,18 +1,20 @@
-use crate::audio::audio_config::AudioConfig;
 use crate::audio::audio_error::AudioError;
 use crate::audio::audio_manager::AudioManager;
+use crate::profile::Profile;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 const PIPE_WIRE_CMD: &str = "pactl";
 
-pub struct PipeWireAudioManager {
-    pub dry_run: bool,
-}
+pub struct PipeWireAudioManager;
 
 impl AudioManager for PipeWireAudioManager {
-    fn get_audio_sinks(&self) -> Result<Vec<String>, AudioError> {
+    fn get_audio_sinks(&self, dry_run: bool) -> Result<Vec<String>, AudioError> {
+        if dry_run {
+            println!("[DRY RUN] {} list short sinks", PIPE_WIRE_CMD);
+            return Ok(vec![]);
+        }
         let output = Command::new(PIPE_WIRE_CMD)
             .args(&["list", "short", "sinks"])
             .output()
@@ -36,36 +38,44 @@ impl AudioManager for PipeWireAudioManager {
         Ok(sinks)
     }
 
-    fn set_audio_sink(&self, sink: &AudioConfig) -> Result<(), AudioError> {
-        let prefix = &sink.sink_name;
-        let attempts = 10;
-        
-        for _ in 0..attempts {
-            let sink_name = self.find_sink_by_prefix(prefix)?;
-        
-            if let Some(name) = sink_name {
-                match self.set_default_sink(&name) {
-                    Ok(()) => {
-                        self.set_sink_volume(&name, sink.volume)?;
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to set sink '{}': {}", name, e);
+    fn set_audio_sinks(&self, profile: &Profile, dry_run: bool) -> Result<(), AudioError> {
+        for sink in &profile.audio_sinks_config {
+            let prefix = &sink.sink_name;
+            let attempts = 10;
+            let mut success = false;
+
+            for _ in 0..attempts {
+                let sink_name = self.find_sink_by_prefix(prefix)?;
+
+                if let Some(name) = sink_name {
+                    match self.set_default_sink(&name, dry_run) {
+                        Ok(()) => {
+                            self.set_sink_volume(&name, sink.volume, dry_run)?;
+                            success = true;
+                            break;
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to set sink '{}': {}", name, e);
+                        }
                     }
                 }
+
+                if dry_run {
+                    println!("[DRY RUN] Waiting 500ms");
+                } else {
+                    thread::sleep(Duration::from_millis(500));
+                }
             }
-        
-            if self.dry_run {
-                println!("[DRY RUN] Waiting 500ms");
-            } else {
-                thread::sleep(Duration::from_millis(500));
+
+            if !success {
+                return Err(AudioError::FailedToSetAudioSink(format!(
+                    "Failed to set sink with prefix '{}' after {} attempts",
+                    prefix, attempts
+                )));
             }
         }
-        
-        Err(AudioError::FailedToSetAudioSink(format!(
-            "Failed to set sink with prefix '{}' after {} attempts",
-            prefix, attempts
-        )))
+
+        Ok(())
     }
 }
 
@@ -97,8 +107,8 @@ impl PipeWireAudioManager {
         Ok(None)
     }
 
-    fn set_default_sink(&self, sink_name: &str) -> Result<(), AudioError> {
-        if self.dry_run {
+    fn set_default_sink(&self, sink_name: &str, dry_run: bool) -> Result<(), AudioError> {
+        if dry_run {
             println!("[DRY RUN] {} set-default-sink {}", PIPE_WIRE_CMD, sink_name);
             return Ok(());
         }
@@ -117,10 +127,10 @@ impl PipeWireAudioManager {
         }
     }
 
-    fn set_sink_volume(&self, sink_name: &str, volume: u8) -> Result<(), AudioError> {
+    fn set_sink_volume(&self, sink_name: &str, volume: u8, dry_run: bool) -> Result<(), AudioError> {
         let volume_str = format!("{}%", volume);
 
-        if self.dry_run {
+        if dry_run {
             println!("[DRY RUN] {} set-sink-volume {} {}", PIPE_WIRE_CMD, sink_name, volume_str);
             return Ok(());
         }

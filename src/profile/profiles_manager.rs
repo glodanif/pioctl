@@ -18,9 +18,7 @@ pub struct ProfilesManager<'a> {
 }
 
 impl<'a> ProfilesManager<'a> {
-    pub fn new(
-        display_manager: &'a Box<dyn DisplayManager>,
-    ) -> Self {
+    pub fn new(display_manager: &'a Box<dyn DisplayManager>) -> Self {
         let config_dir = dirs::config_dir()
             .expect("Could not find config directory")
             .join(env!("CARGO_PKG_NAME"));
@@ -36,11 +34,10 @@ impl<'a> ProfilesManager<'a> {
         if self.config_file.exists() {
             let config_file_content = fs::read_to_string(&self.config_file)
                 .map_err(|_| DisplayError::FailedToGetConfig)?;
-            let config: Config = serde_json::from_str(&config_file_content)
-                .map_err(|w| {
-                    println!("Failed to parse config file: {}", w);
-                    DisplayError::FailedToGetConfig
-                })?;
+            let config: Config = serde_json::from_str(&config_file_content).map_err(|w| {
+                println!("Failed to parse config file: {}", w);
+                DisplayError::FailedToGetConfig
+            })?;
             Ok(config)
         } else {
             fs::create_dir_all(&self.config_dir).map_err(|_| DisplayError::FailedToCreateConfig)?;
@@ -57,7 +54,7 @@ impl<'a> ProfilesManager<'a> {
             .map_err(|_| DisplayError::EncodingError("get_profiles_json"))
     }
 
-    pub fn add_profile(&self, profile_json: String) -> Result<String, DisplayError> {
+    pub fn add_profile(&self, profile_json: String, dry_run: bool) -> Result<String, DisplayError> {
         let mut profile: Profile = serde_json::from_str(&profile_json).map_err(|err| {
             println!("Error: {}", err);
             DisplayError::EncodingError("add_profile")
@@ -80,7 +77,7 @@ impl<'a> ProfilesManager<'a> {
             Uuid::new_v4().to_string()
         };
 
-        let available_displays = self.display_manager.get_monitors()?;
+        let available_displays = self.display_manager.get_monitors(dry_run)?;
         let validation_error = self.validate_profile(&profile, available_displays);
         if let Some(validation_error) = validation_error {
             return Err(DisplayError::ConfigIsNotSupported(validation_error));
@@ -88,8 +85,11 @@ impl<'a> ProfilesManager<'a> {
 
         profile.id = Some(id.clone());
         profiles.profiles.push(profile);
-        fs::write(&self.config_file, serde_json::to_string_pretty(&profiles).unwrap())
-            .map_err(|_| DisplayError::FailedToSetConfig)?;
+        fs::write(
+            &self.config_file,
+            serde_json::to_string_pretty(&profiles).unwrap(),
+        )
+        .map_err(|_| DisplayError::FailedToSetConfig)?;
         Ok(id)
     }
 
@@ -152,8 +152,11 @@ impl<'a> ProfilesManager<'a> {
         }
         config.current_profile_id = Some(profile_id);
 
-        fs::write(&self.config_file, serde_json::to_string_pretty(&config).unwrap())
-            .map_err(|_| DisplayError::FailedToSetConfig)?;
+        fs::write(
+            &self.config_file,
+            serde_json::to_string_pretty(&config).unwrap(),
+        )
+        .map_err(|_| DisplayError::FailedToSetConfig)?;
 
         Ok(())
     }
@@ -163,7 +166,7 @@ impl<'a> ProfilesManager<'a> {
         profile: &Profile,
         available_displays: Vec<Monitor>,
     ) -> Option<ValidationError> {
-        for monitor_config in &profile.monitors {
+        for monitor_config in &profile.monitors_config {
             let matching_display = available_displays
                 .iter()
                 .find(|d| d.name == monitor_config.name);
@@ -233,7 +236,11 @@ impl<'a> ProfilesManager<'a> {
                     ));
                 }
 
-                if !profile.monitors.iter().any(|m| &m.name == mirror_source) {
+                if !profile
+                    .monitors_config
+                    .iter()
+                    .any(|m| &m.name == mirror_source)
+                {
                     return Some(ValidationError::InvalidMirrorSourceName(
                         monitor_config.name.clone(),
                         mirror_source.clone(),
@@ -243,10 +250,12 @@ impl<'a> ProfilesManager<'a> {
             }
         }
 
-        if let Some(audio_sink) = &profile.audio_sink {
-            if audio_sink.volume > 150 {
-                return Some(ValidationError::InvalidVolumeValue(audio_sink.volume));
-            }
+        if let Some(sink) = profile
+            .audio_sinks_config
+            .iter()
+            .find(|sink| sink.volume > 150)
+        {
+            return Some(ValidationError::InvalidVolumeValue(sink.volume));
         }
 
         None

@@ -15,11 +15,12 @@ use clap::Parser;
 
 fn main() {
     let cli = Cli::parse();
-    let display_manager = get_display_manager(cli.dry_run);
-    let audio_manager = get_audio_manager(cli.dry_run);
+    let display_manager = get_display_manager();
+    let audio_manager = get_audio_manager();
     let notifications_manager = NotificationsManager::new();
     let profiles_manager = ProfilesManager::new(&display_manager);
     let dispatcher = Dispatcher::new(
+        cli.dry_run,
         &display_manager,
         &audio_manager,
         &profiles_manager,

@@ -3,7 +3,7 @@ use crate::display::monitor::Monitor;
 use crate::profile::Profile;
 
 pub trait DisplayManager {
-    fn get_monitors(&self) -> Result<Vec<Monitor>, DisplayError>;
-    fn get_monitors_json(&self) -> Result<String, DisplayError>;
-    fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DisplayError>;
+    fn get_monitors(&self, dry_run: bool) -> Result<Vec<Monitor>, DisplayError>;
+    fn get_monitors_json(&self, dry_run: bool) -> Result<String, DisplayError>;
+    fn set_monitors_profile(&self, profile: &Profile, dry_run: bool) -> Result<(), DisplayError>;
 }

@@ -12,22 +12,9 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
-#[derive(Deserialize)]
-struct HyprlandClient {
-    address: String,
-    workspace: HyprlandClientWorkspace,
-}
-
-#[derive(Deserialize)]
-struct HyprlandClientWorkspace {
-    id: i32,
-}
-
 const HYPRLAND_CMD: &str = "hyprctl";
 
-pub struct HyprlandManager {
-    pub dry_run: bool,
-}
+pub struct HyprlandManager;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,8 +114,8 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
 }
 
 impl HyprlandManager {
-    fn run(&self, args: &[&str]) -> Result<std::process::Output, std::io::Error> {
-        if self.dry_run {
+    fn run(&self, args: &[&str], dry_run: bool) -> Result<std::process::Output, std::io::Error> {
+        if dry_run {
             println!("[DRY RUN] {} {}", HYPRLAND_CMD, args.join(" "));
             Ok(std::process::Output {
                 status: std::process::ExitStatus::from_raw(0),
@@ -139,18 +126,16 @@ impl HyprlandManager {
             Command::new(HYPRLAND_CMD).args(args).output()
         }
     }
-
 }
 
 impl DisplayManager for HyprlandManager {
-    fn get_monitors(&self) -> Result<Vec<Monitor>, DisplayError> {
-        let output = self.run(&["monitors", "all", "-j"])
-            .map_err(|_| {
-                DisplayError::CommandExecutionError(format!(
-                    "Failed to execute command {} monitors all -j",
-                    HYPRLAND_CMD
-                ))
-            })?;
+    fn get_monitors(&self, dry_run: bool) -> Result<Vec<Monitor>, DisplayError> {
+        let output = self.run(&["monitors", "all", "-j"], dry_run).map_err(|_| {
+            DisplayError::CommandExecutionError(format!(
+                "Failed to execute command {} monitors all -j",
+                HYPRLAND_CMD
+            ))
+        })?;
 
         if !output.status.success() {
             return Err(DisplayError::CommandExecutionError(format!(
@@ -168,20 +153,22 @@ impl DisplayManager for HyprlandManager {
         Ok(hyprland_monitors.into_iter().map(Monitor::from).collect())
     }
 
-    fn get_monitors_json(&self) -> Result<String, DisplayError> {
-        let monitors = self.get_monitors()?;
+    fn get_monitors_json(&self, dry_run: bool) -> Result<String, DisplayError> {
+        let monitors = self.get_monitors(dry_run)?;
         let result_json = serde_json::to_string_pretty(&monitors)
             .map_err(|_| DisplayError::EncodingError("get_monitors_json"))?;
         Ok(result_json)
     }
 
-    fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DisplayError> {
-        for monitor in &profile.monitors {
+    fn set_monitors_profile(&self, profile: &Profile, dry_run: bool) -> Result<(), DisplayError> {
+        let mut any_disabled = false;
+        for monitor in &profile.monitors_config {
             if !monitor.is_enabled {
                 let config = format!("{},disable", monitor.name);
-                match self.run(&["keyword", "monitor", config.as_str()]) {
+                match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
                     Ok(output) if output.status.success() => {
-                        if !self.dry_run {
+                        any_disabled = true;
+                        if !dry_run {
                             println!("Successfully disabled monitor: {}", monitor.name);
                         }
                     }
@@ -190,11 +177,15 @@ impl DisplayManager for HyprlandManager {
                         eprintln!("Failed to disable monitor {}: {}", monitor.name, msg.trim());
                         return Err(DisplayError::CommandExecutionError(format!(
                             "Failed to disable monitor {}: {}",
-                            monitor.name, msg.trim()
+                            monitor.name,
+                            msg.trim()
                         )));
                     }
                     Err(e) => {
-                        eprintln!("Failed to execute command for monitor {}: {}", monitor.name, e);
+                        eprintln!(
+                            "Failed to execute command for monitor {}: {}",
+                            monitor.name, e
+                        );
                         return Err(DisplayError::CommandExecutionError(format!(
                             "Failed to execute command for monitor {}: {}",
                             monitor.name, e
@@ -203,12 +194,14 @@ impl DisplayManager for HyprlandManager {
                 }
             }
         }
-        if self.dry_run {
-            println!("[DRY RUN] Waiting 500ms");
-        } else {
-            thread::sleep(Duration::from_millis(500));
+        if any_disabled {
+            if dry_run {
+                println!("[DRY RUN] Disabling-to-Enabling delay: 500ms");
+            } else {
+                thread::sleep(Duration::from_millis(500));
+            }
         }
-        for monitor in &profile.monitors {
+        for monitor in &profile.monitors_config {
             if monitor.is_enabled {
                 let config = format!(
                     "{},{}x{}@{},{}x{},{}",
@@ -220,24 +213,36 @@ impl DisplayManager for HyprlandManager {
                     monitor.current_position.height,
                     monitor.scale,
                 );
-                match self.run(&["keyword", "monitor", config.as_str()]) {
+                match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
                     Ok(output) if output.status.success() => {
-                        if !self.dry_run {
-                            println!("Successfully configured monitor: {} ({}x{}@{}Hz)",
-                                     monitor.name, monitor.resolution.width,
-                                     monitor.resolution.height, monitor.refresh_rate);
+                        if !dry_run {
+                            println!(
+                                "Successfully configured monitor: {} ({}x{}@{}Hz)",
+                                monitor.name,
+                                monitor.resolution.width,
+                                monitor.resolution.height,
+                                monitor.refresh_rate
+                            );
                         }
                     }
                     Ok(output) => {
                         let msg = String::from_utf8_lossy(&output.stdout);
-                        eprintln!("Failed to configure monitor {}: {}", monitor.name, msg.trim());
+                        eprintln!(
+                            "Failed to configure monitor {}: {}",
+                            monitor.name,
+                            msg.trim()
+                        );
                         return Err(DisplayError::CommandExecutionError(format!(
                             "Failed to configure monitor {}: {}",
-                            monitor.name, msg.trim()
+                            monitor.name,
+                            msg.trim()
                         )));
                     }
                     Err(e) => {
-                        eprintln!("Failed to execute command for monitor {}: {}", monitor.name, e);
+                        eprintln!(
+                            "Failed to execute command for monitor {}: {}",
+                            monitor.name, e
+                        );
                         return Err(DisplayError::CommandExecutionError(format!(
                             "Failed to execute command for monitor {}: {}",
                             monitor.name, e
@@ -246,112 +251,6 @@ impl DisplayManager for HyprlandManager {
                 }
             }
         }
-
-        if self.dry_run {
-            println!("[DRY RUN] Waiting 500ms");
-        } else {
-            thread::sleep(Duration::from_millis(500));
-        }
-
-        // Move all explicitly mapped workspaces to their target monitors
-        for workspace in &profile.workspaces {
-            match self.run(&[
-                "dispatch",
-                "moveworkspacetomonitor",
-                workspace.id.to_string().as_str(),
-                workspace.monitor_name.as_str(),
-            ]) {
-                Ok(output) if output.status.success() => {
-                    if !self.dry_run {
-                        println!("Successfully moved workspace {} to monitor {}",
-                                 workspace.id, workspace.monitor_name);
-                    }
-                }
-                Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to move workspace {} to monitor {}: {}",
-                              workspace.id, workspace.monitor_name, stderr);
-                }
-                Err(e) => {
-                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
-                              workspace.id, e);
-                }
-            }
-        }
-
-        // Activate explicitly defined workspaces to make them visible on their monitors
-        for workspace in &profile.workspaces {
-            match self.run(&["dispatch", "workspace", workspace.id.to_string().as_str()]) {
-                Ok(output) if output.status.success() => {
-                    if !self.dry_run {
-                        println!("Successfully activated workspace {} on monitor {}",
-                                 workspace.id, workspace.monitor_name);
-                    }
-                }
-                Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to activate workspace {}: {}", workspace.id, stderr);
-                }
-                Err(e) => {
-                    eprintln!("Failed to activate workspace {}: {}", workspace.id, e);
-                }
-            }
-        }
-
-        // Move all windows to a single monitor if specified
-        if let Some(ref target_monitor) = profile.move_all_windows_to_monitor {
-            let clients_output = Command::new(HYPRLAND_CMD)
-                .args(["clients", "-j"])
-                .output()
-                .map_err(|e| DisplayError::CommandExecutionError(format!("Failed to get clients: {}", e)))?;
-
-            let json_str = String::from_utf8(clients_output.stdout)
-                .map_err(|_| DisplayError::CommandOutputParseError)?;
-
-            let clients: Vec<HyprlandClient> = serde_json::from_str(&json_str)
-                .map_err(|_| DisplayError::EncodingError("move_all_windows_to_monitor"))?;
-
-            for client in clients {
-                if client.workspace.id <= 0 {
-                    continue;
-                }
-                let addr = format!("address:{}", client.address);
-                match self.run(&["dispatch", "movewindowtomonitor", addr.as_str(), target_monitor.as_str()]) {
-                    Ok(output) if output.status.success() => {
-                        if !self.dry_run {
-                            println!("Moved window {} to monitor {}", client.address, target_monitor);
-                        }
-                    }
-                    Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!("Failed to move window {}: {}", client.address, stderr);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to move window {}: {}", client.address, e);
-                    }
-                }
-            }
-        }
-
-        // Focus the final workspace if specified
-        if let Some(focus_ws_id) = profile.focus_workspace_id {
-            match self.run(&["dispatch", "workspace", focus_ws_id.to_string().as_str()]) {
-                Ok(output) if output.status.success() => {
-                    if !self.dry_run {
-                        println!("Successfully focused workspace {}", focus_ws_id);
-                    }
-                }
-                Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to focus workspace {}: {}", focus_ws_id, stderr);
-                }
-                Err(e) => {
-                    eprintln!("Failed to focus workspace {}: {}", focus_ws_id, e);
-                }
-            }
-        }
-
-
         Ok(())
     }
 }
