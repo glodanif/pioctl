@@ -4,13 +4,14 @@ use super::display_manager::DisplayManager;
 use super::mode::Mode;
 use super::monitor::Monitor;
 use super::size::Size;
-use crate::profile::Profile;
+use crate::profile::monitor_config::MonitorConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+use crate::profile::monitors_config::MonitorsConfig;
 
 const HYPRLAND_CMD: &str = "hyprctl";
 
@@ -160,42 +161,16 @@ impl DisplayManager for HyprlandManager {
         Ok(result_json)
     }
 
-    fn set_monitors_profile(&self, profile: &Profile, dry_run: bool) -> Result<(), DisplayError> {
+    fn set_monitors_config(&self, config: &MonitorsConfig, dry_run: bool) -> Result<(), DisplayError> {
         let mut any_disabled = false;
-        for monitor in &profile.monitors_config.monitors {
+        for monitor in &config.monitors {
             if !monitor.is_enabled {
-                let config = format!("{},disable", monitor.name);
-                match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
-                    Ok(output) if output.status.success() => {
-                        any_disabled = true;
-                        if !dry_run {
-                            println!("Successfully disabled monitor: {}", monitor.name);
-                        }
-                    }
-                    Ok(output) => {
-                        let msg = String::from_utf8_lossy(&output.stdout);
-                        eprintln!("Failed to disable monitor {}: {}", monitor.name, msg.trim());
-                        return Err(DisplayError::CommandExecutionError(format!(
-                            "Failed to disable monitor {}: {}",
-                            monitor.name,
-                            msg.trim()
-                        )));
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "Failed to execute command for monitor {}: {}",
-                            monitor.name, e
-                        );
-                        return Err(DisplayError::CommandExecutionError(format!(
-                            "Failed to execute command for monitor {}: {}",
-                            monitor.name, e
-                        )));
-                    }
-                }
+                self.set_disabled_monitor(monitor, dry_run)?;
+                any_disabled = true;
             }
         }
 
-        if any_disabled && let Some(delay) = profile.monitors_config.disabled_to_enabled_delay_ms {
+        if any_disabled && let Some(delay) = config.disabled_to_enabled_delay_ms {
             if dry_run {
                 println!("[DRY RUN] Disabling-to-Enabling delay: {}ms", delay);
             } else {
@@ -203,56 +178,103 @@ impl DisplayManager for HyprlandManager {
             }
         }
 
-        for monitor in &profile.monitors_config.monitors {
+        for monitor in &config.monitors {
             if monitor.is_enabled {
-                let config = format!(
-                    "{},{}x{}@{},{}x{},{}",
-                    monitor.name,
-                    monitor.resolution.width,
-                    monitor.resolution.height,
-                    monitor.refresh_rate,
-                    monitor.current_position.width,
-                    monitor.current_position.height,
-                    monitor.scale,
-                );
-                match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
-                    Ok(output) if output.status.success() => {
-                        if !dry_run {
-                            println!(
-                                "Successfully configured monitor: {} ({}x{}@{}Hz)",
-                                monitor.name,
-                                monitor.resolution.width,
-                                monitor.resolution.height,
-                                monitor.refresh_rate
-                            );
-                        }
-                    }
-                    Ok(output) => {
-                        let msg = String::from_utf8_lossy(&output.stdout);
-                        eprintln!(
-                            "Failed to configure monitor {}: {}",
-                            monitor.name,
-                            msg.trim()
-                        );
-                        return Err(DisplayError::CommandExecutionError(format!(
-                            "Failed to configure monitor {}: {}",
-                            monitor.name,
-                            msg.trim()
-                        )));
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "Failed to execute command for monitor {}: {}",
-                            monitor.name, e
-                        );
-                        return Err(DisplayError::CommandExecutionError(format!(
-                            "Failed to execute command for monitor {}: {}",
-                            monitor.name, e
-                        )));
-                    }
-                }
+                self.set_enabled_monitor(monitor, dry_run)?;
             }
         }
+        
         Ok(())
+    }
+}
+
+impl HyprlandManager {
+    fn set_disabled_monitor(
+        &self,
+        monitor: &MonitorConfig,
+        dry_run: bool,
+    ) -> Result<(), DisplayError> {
+        let config = format!("{},disable", monitor.name);
+        match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
+            Ok(output) if output.status.success() => {
+                if !dry_run {
+                    println!("Successfully disabled monitor: {}", monitor.name);
+                }
+                Ok(())
+            }
+            Ok(output) => {
+                let msg = String::from_utf8_lossy(&output.stdout);
+                eprintln!("Failed to disable monitor {}: {}", monitor.name, msg.trim());
+                Err(DisplayError::CommandExecutionError(format!(
+                    "Failed to disable monitor {}: {}",
+                    monitor.name,
+                    msg.trim()
+                )))
+            }
+            Err(e) => {
+                eprintln!(
+                    "Failed to execute command for monitor {}: {}",
+                    monitor.name, e
+                );
+                Err(DisplayError::CommandExecutionError(format!(
+                    "Failed to execute command for monitor {}: {}",
+                    monitor.name, e
+                )))
+            }
+        }
+    }
+
+    fn set_enabled_monitor(
+        &self,
+        monitor: &MonitorConfig,
+        dry_run: bool,
+    ) -> Result<(), DisplayError> {
+        let config = format!(
+            "{},{}x{}@{},{}x{},{}",
+            monitor.name,
+            monitor.resolution.width,
+            monitor.resolution.height,
+            monitor.refresh_rate,
+            monitor.current_position.width,
+            monitor.current_position.height,
+            monitor.scale,
+        );
+        match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
+            Ok(output) if output.status.success() => {
+                if !dry_run {
+                    println!(
+                        "Successfully configured monitor: {} ({}x{}@{}Hz)",
+                        monitor.name,
+                        monitor.resolution.width,
+                        monitor.resolution.height,
+                        monitor.refresh_rate
+                    );
+                }
+                Ok(())
+            }
+            Ok(output) => {
+                let msg = String::from_utf8_lossy(&output.stdout);
+                eprintln!(
+                    "Failed to configure monitor {}: {}",
+                    monitor.name,
+                    msg.trim()
+                );
+                Err(DisplayError::CommandExecutionError(format!(
+                    "Failed to configure monitor {}: {}",
+                    monitor.name,
+                    msg.trim()
+                )))
+            }
+            Err(e) => {
+                eprintln!(
+                    "Failed to execute command for monitor {}: {}",
+                    monitor.name, e
+                );
+                Err(DisplayError::CommandExecutionError(format!(
+                    "Failed to execute command for monitor {}: {}",
+                    monitor.name, e
+                )))
+            }
+        }
     }
 }

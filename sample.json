@@ -69,50 +69,37 @@
       },
       "desktop_config": {
         "delay_before_ms": 0,
-        "active_workspaces": [
-          {
-            "index": "1"
-          },
-          {
-            "index": "2",
-            "focused": true
-          }
-        ],
         "workspaces": [
           {
             "index": "1",
             "monitor_name": "DP-2",
-            "layout": "default"
+            "active": true
           },
           {
             "index": "2",
             "monitor_name": "DP-1",
-            "layout": "default"
+            "active": true,
+            "focused": true
           },
           {
             "index": "3",
-            "monitor_name": "DP-1",
-            "layout": "default"
+            "monitor_name": "DP-1"
           },
           {
             "index": "4",
-            "monitor_name": "DP-1",
-            "layout": "default"
+            "monitor_name": "DP-1"
           },
           {
             "index": "5",
-            "monitor_name": "DP-1",
-            "layout": "default"
+            "monitor_name": "DP-1"
           },
           {
             "index": "6",
-            "monitor_name": "DP-1",
-            "layout": "default"
+            "monitor_name": "DP-1"
           },
           {
             "index": "7",
-            "monitor_name": "DP-1",
-            "layout": "default"
+            "monitor_name": "DP-1"
           }
         ]
       }
@@ -185,47 +172,36 @@
       },
       "desktop_config": {
         "delay_before_ms": 0,
-        "active_workspaces": [
-          {
-            "index": "1",
-            "focused": true
-          }
-        ],
         "workspaces": [
           {
             "index": "1",
             "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "active": true,
+            "focused": true
           },
           {
             "index": "2",
-            "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "monitor_name": "HDMI-A-1"
           },
           {
             "index": "3",
-            "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "monitor_name": "HDMI-A-1"
           },
           {
             "index": "4",
-            "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "monitor_name": "HDMI-A-1"
           },
           {
             "index": "5",
-            "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "monitor_name": "HDMI-A-1"
           },
           {
             "index": "6",
-            "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "monitor_name": "HDMI-A-1"
           },
           {
             "index": "7",
-            "monitor_name": "HDMI-A-1",
-            "layout": "default"
+            "monitor_name": "HDMI-A-1"
           }
         ]
       }

@@ -138,7 +138,10 @@ impl<'a> Dispatcher<'a> {
 
         if let Some(delay) = profile.monitors_config.delay_before_ms {
             if self.dry_run {
-                println!("[DRY RUN] Delay before setting monitors config: {}ms", delay);
+                println!(
+                    "[DRY RUN] Delay before setting monitors config: {}ms",
+                    delay
+                );
             } else {
                 thread::sleep(Duration::from_millis(delay as u64));
             }
@@ -146,7 +149,7 @@ impl<'a> Dispatcher<'a> {
 
         let monitors_result = self
             .display_manager
-            .set_monitors_profile(&profile, self.dry_run);
+            .set_monitors_config(&profile.monitors_config, self.dry_run);
         let monitors_icon = if monitors_result.is_ok() {
             ICON_CHECK
         } else {
@@ -186,13 +189,18 @@ impl<'a> Dispatcher<'a> {
 
         if let Some(delay) = profile.audio_sinks_config.delay_before_ms {
             if self.dry_run {
-                println!("[DRY RUN] Delay before settings audio sinks config: {}ms", delay);
+                println!(
+                    "[DRY RUN] Delay before settings audio sinks config: {}ms",
+                    delay
+                );
             } else {
                 thread::sleep(Duration::from_millis(delay as u64));
             }
         }
 
-        let audio_result = self.audio_manager.set_audio_sinks(&profile, self.dry_run);
+        let audio_result = self
+            .audio_manager
+            .set_audio_sinks_config(&profile.audio_sinks_config, self.dry_run);
         let audio_icon = if audio_result.is_ok() {
             ICON_CHECK
         } else {

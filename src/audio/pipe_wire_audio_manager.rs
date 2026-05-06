@@ -1,6 +1,6 @@
 use crate::audio::audio_error::AudioError;
 use crate::audio::audio_manager::AudioManager;
-use crate::profile::Profile;
+use crate::profile::audio_sinks_config::AudioSinksConfig;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -38,8 +38,8 @@ impl AudioManager for PipeWireAudioManager {
         Ok(sinks)
     }
 
-    fn set_audio_sinks(&self, profile: &Profile, dry_run: bool) -> Result<(), AudioError> {
-        for sink in &profile.audio_sinks_config.audio_sinks {
+    fn set_audio_sinks_config(&self, config: &AudioSinksConfig, dry_run: bool) -> Result<(), AudioError> {
+        for sink in &config.audio_sinks {
             let prefix = &sink.sink_name;
             let attempts = 10;
             let mut success = false;

@@ -6,6 +6,7 @@ pub mod mode;
 pub mod monitor;
 pub mod size;
 pub mod transformation;
+pub mod workspace;
 
 use display_manager::DisplayManager;
 use hyprland_display_manager::HyprlandManager;
