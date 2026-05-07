@@ -38,14 +38,11 @@ impl<'a> Dispatcher<'a> {
     pub fn handle_command(&self, command: Option<Command>) {
         match command {
             Some(Command::Profiles) => {
-                let profiles = &self.profiles_manager.get_profiles_json();
+                let profiles = &self.profiles_manager.get_profiles();
                 match profiles {
                     Ok(profiles) => println!("{}", profiles),
                     Err(err) => eprintln!("Failed to get profiles: {}", err),
                 }
-            }
-            Some(Command::RemoveProfile { profile_id }) => {
-                eprintln!("Remove profile not implemented yet: {}", profile_id);
             }
             Some(Command::Current) => {
                 let current_profile = &self.profiles_manager.get_current_profile_json();

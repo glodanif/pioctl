@@ -77,10 +77,16 @@ impl<'a> ProfilesManager<'a> {
         serde_json::from_str(&content).map_err(|_| DisplayError::FailedToGetConfig)
     }
 
-    pub fn get_profiles_json(&self) -> Result<String, DisplayError> {
-        let profiles: Vec<Profile> = self.load_profiles()?.into_iter().map(|(_, p)| p).collect();
-        serde_json::to_string_pretty(&profiles)
-            .map_err(|_| DisplayError::EncodingError("get_profiles_json"))
+    pub fn get_profiles(&self) -> Result<String, DisplayError> {
+        let profiles = self.load_profiles()?;
+        let mut parts: Vec<String> = Vec::new();
+        for (stem, profile) in profiles {
+            let path = self.config_dir.join(format!("{}.json", stem));
+            let content = serde_json::to_string_pretty(&profile)
+                .map_err(|_| DisplayError::EncodingError("get_profiles"))?;
+            parts.push(format!("{}", path.display()) + "\n" + &content);
+        }
+        Ok(parts.join("\n---\n"))
     }
 
     pub fn get_current_profile(&self) -> Result<Profile, DisplayError> {
@@ -100,9 +106,24 @@ impl<'a> ProfilesManager<'a> {
     }
 
     pub fn get_current_profile_json(&self) -> Result<String, DisplayError> {
-        let profile = self.get_current_profile()?;
-        serde_json::to_string_pretty(&profile)
-            .map_err(|_| DisplayError::EncodingError("get_current_profile_json"))
+        let stem = match self.get_current_profile_stem() {
+            Ok(stem) => stem,
+            Err(DisplayError::CurrentProfileNotSet) => {
+                let mut profiles = self.load_profiles()?;
+                if profiles.is_empty() {
+                    return Err(DisplayError::ProfileNotFound);
+                }
+                let (stem, _) = profiles.remove(0);
+                self.save_current_profile_stem(&stem)?;
+                stem
+            }
+            Err(err) => return Err(err),
+        };
+        let path = self.config_dir.join(format!("{}.json", stem));
+        let profile = self.get_profile_by_stem(&stem)?;
+        let content = serde_json::to_string_pretty(&profile)
+            .map_err(|_| DisplayError::EncodingError("get_current_profile_json"))?;
+        Ok(format!("{}", path.display()) + "\n" + &content)
     }
 
     pub fn get_profile_by_id(&self, id: String) -> Result<Profile, DisplayError> {
