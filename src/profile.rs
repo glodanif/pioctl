@@ -1,8 +1,6 @@
 mod profile;
 mod profiles_manager;
-pub mod config;
 pub mod monitor_config;
-pub mod validation_error;
 pub mod monitors_config;
 pub mod audio_sinks_config;
 pub mod desktop_config;

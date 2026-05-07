@@ -44,15 +44,6 @@ impl<'a> Dispatcher<'a> {
                     Err(err) => eprintln!("Failed to get profiles: {}", err),
                 }
             }
-            Some(Command::AddProfile { profile_json }) => {
-                let id = &self
-                    .profiles_manager
-                    .add_profile(profile_json, self.dry_run);
-                match id {
-                    Ok(id) => println!("Profile added successfully: {}", id),
-                    Err(err) => eprintln!("Failed to add profile: {}", err),
-                }
-            }
             Some(Command::RemoveProfile { profile_id }) => {
                 eprintln!("Remove profile not implemented yet: {}", profile_id);
             }
@@ -171,13 +162,11 @@ impl<'a> Dispatcher<'a> {
                 } else {
                     println!("Monitor config applied successfully: {}", profile.name);
                 }
-                if let Some(profile_id) = &profile.id {
-                    if let Err(err) = self
-                        .profiles_manager
-                        .set_current_profile_id(profile_id.clone())
-                    {
-                        eprintln!("Warning: Failed to update monitors: {}", err);
-                    }
+                if let Err(err) = self
+                    .profiles_manager
+                    .set_current_profile_id(profile.name.clone())
+                {
+                    eprintln!("Warning: Failed to update current profile: {}", err);
                 }
             }
             Err(err) => eprintln!("Failed to apply profile: {}", err),

@@ -1,5 +1,3 @@
-use crate::profile::validation_error::ValidationError;
-
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum DisplayError {
     #[error("Failed to execute command {0}")]
@@ -20,6 +18,4 @@ pub enum DisplayError {
     FailedToCreateConfig,
     #[error("Failed to set config")]
     FailedToSetConfig,
-    #[error("Config is not supported {0}")]
-    ConfigIsNotSupported(ValidationError),
 }

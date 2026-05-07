@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct Profile {
-    pub id: Option<String>,
     pub name: String,
     pub monitors_config: MonitorsConfig,
     pub audio_sinks_config: AudioSinksConfig,

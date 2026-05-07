@@ -1,20 +1,13 @@
 use crate::display::display_error::DisplayError;
 use crate::display::display_manager::DisplayManager;
-use crate::display::monitor::Monitor;
-use crate::display::transformation::Transformation;
-use crate::profile::config::Config;
 use crate::profile::profile::Profile;
-use crate::profile::validation_error::ValidationError;
 use std::fs;
 use std::path::PathBuf;
-use uuid::Uuid;
-
-const CONFIG_FILE_NAME: &str = "config.json";
 
 pub struct ProfilesManager<'a> {
-    display_manager: &'a Box<dyn DisplayManager>,
+    _display_manager: &'a Box<dyn DisplayManager>,
     config_dir: PathBuf,
-    config_file: PathBuf,
+    data_dir: PathBuf,
 }
 
 impl<'a> ProfilesManager<'a> {
@@ -22,88 +15,88 @@ impl<'a> ProfilesManager<'a> {
         let config_dir = dirs::config_dir()
             .expect("Could not find config directory")
             .join(env!("CARGO_PKG_NAME"));
-        let config_file = config_dir.join(CONFIG_FILE_NAME);
+        let data_dir = dirs::data_dir()
+            .expect("Could not find data directory")
+            .join(env!("CARGO_PKG_NAME"));
         ProfilesManager {
-            display_manager,
+            _display_manager: display_manager,
             config_dir,
-            config_file,
+            data_dir,
         }
     }
 
-    fn get_profiles(&self) -> Result<Config, DisplayError> {
-        if self.config_file.exists() {
-            let config_file_content = fs::read_to_string(&self.config_file)
-                .map_err(|_| DisplayError::FailedToGetConfig)?;
-            let config: Config = serde_json::from_str(&config_file_content).map_err(|w| {
-                println!("Failed to parse config file: {}", w);
-                DisplayError::FailedToGetConfig
-            })?;
-            Ok(config)
-        } else {
-            fs::create_dir_all(&self.config_dir).map_err(|_| DisplayError::FailedToCreateConfig)?;
-            Ok(Config {
-                profiles: Vec::new(),
-                current_profile_id: None,
-            })
+    // Returns (filename_stem, Profile) pairs sorted by stem.
+    fn load_profiles(&self) -> Result<Vec<(String, Profile)>, DisplayError> {
+        fs::create_dir_all(&self.config_dir).map_err(|_| DisplayError::FailedToCreateConfig)?;
+        let mut profiles = Vec::new();
+        for entry in fs::read_dir(&self.config_dir).map_err(|_| DisplayError::FailedToGetConfig)? {
+            let entry = entry.map_err(|_| DisplayError::FailedToGetConfig)?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                let stem = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                let content =
+                    fs::read_to_string(&path).map_err(|_| DisplayError::FailedToGetConfig)?;
+                let profile: Profile = serde_json::from_str(&content).map_err(|e| {
+                    println!("Failed to parse profile {:?}: {}", path, e);
+                    DisplayError::FailedToGetConfig
+                })?;
+                profiles.push((stem, profile));
+            }
         }
+        profiles.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(profiles)
+    }
+
+    fn get_current_profile_stem(&self) -> Result<String, DisplayError> {
+        let path = self.data_dir.join("current_profile");
+        if path.exists() {
+            fs::read_to_string(&path)
+                .map(|s| s.trim().to_string())
+                .map_err(|_| DisplayError::FailedToGetConfig)
+        } else {
+            Err(DisplayError::CurrentProfileNotSet)
+        }
+    }
+
+    fn save_current_profile_stem(&self, stem: &str) -> Result<(), DisplayError> {
+        fs::create_dir_all(&self.data_dir).map_err(|_| DisplayError::FailedToSetConfig)?;
+        fs::write(self.data_dir.join("current_profile"), stem)
+            .map_err(|_| DisplayError::FailedToSetConfig)
+    }
+
+    fn get_profile_by_stem(&self, stem: &str) -> Result<Profile, DisplayError> {
+        let path = self.config_dir.join(format!("{}.json", stem));
+        if !path.exists() {
+            return Err(DisplayError::ProfileNotFound);
+        }
+        let content = fs::read_to_string(&path).map_err(|_| DisplayError::FailedToGetConfig)?;
+        serde_json::from_str(&content).map_err(|_| DisplayError::FailedToGetConfig)
     }
 
     pub fn get_profiles_json(&self) -> Result<String, DisplayError> {
-        let profiles = self.get_profiles()?;
+        let profiles: Vec<Profile> = self.load_profiles()?.into_iter().map(|(_, p)| p).collect();
         serde_json::to_string_pretty(&profiles)
             .map_err(|_| DisplayError::EncodingError("get_profiles_json"))
     }
 
-    pub fn add_profile(&self, profile_json: String, dry_run: bool) -> Result<String, DisplayError> {
-        let mut profile: Profile = serde_json::from_str(&profile_json).map_err(|err| {
-            println!("Error: {}", err);
-            DisplayError::EncodingError("add_profile")
-        })?;
-
-        let mut profiles = self.get_profiles()?;
-
-        let id = if let Some(user_id) = &profile.id {
-            if profiles
-                .profiles
-                .iter()
-                .any(|p| p.id.as_ref() == Some(user_id))
-            {
-                return Err(DisplayError::ConfigIsNotSupported(
-                    ValidationError::DuplicateProfileId(user_id.clone()),
-                ));
-            }
-            user_id.clone()
-        } else {
-            Uuid::new_v4().to_string()
-        };
-
-        let available_displays = self.display_manager.get_monitors(dry_run)?;
-        let validation_error = self.validate_profile(&profile, available_displays);
-        if let Some(validation_error) = validation_error {
-            return Err(DisplayError::ConfigIsNotSupported(validation_error));
-        }
-
-        profile.id = Some(id.clone());
-        profiles.profiles.push(profile);
-        fs::write(
-            &self.config_file,
-            serde_json::to_string_pretty(&profiles).unwrap(),
-        )
-        .map_err(|_| DisplayError::FailedToSetConfig)?;
-        Ok(id)
-    }
-
     pub fn get_current_profile(&self) -> Result<Profile, DisplayError> {
-        let profiles = self.get_profiles()?;
-        let current_profile_id = profiles.current_profile_id;
-        if let Some(id) = current_profile_id {
-            return Ok(profiles
-                .profiles
-                .into_iter()
-                .find(|p| p.id.as_ref() == Some(&id))
-                .unwrap());
+        match self.get_current_profile_stem() {
+            Ok(stem) => self.get_profile_by_stem(&stem),
+            Err(DisplayError::CurrentProfileNotSet) => {
+                let mut profiles = self.load_profiles()?;
+                if profiles.is_empty() {
+                    return Err(DisplayError::ProfileNotFound);
+                }
+                let (stem, profile) = profiles.remove(0);
+                self.save_current_profile_stem(&stem)?;
+                Ok(profile)
+            }
+            Err(err) => Err(err),
         }
-        Err(DisplayError::CurrentProfileNotSet)
     }
 
     pub fn get_current_profile_json(&self) -> Result<String, DisplayError> {
@@ -113,151 +106,40 @@ impl<'a> ProfilesManager<'a> {
     }
 
     pub fn get_profile_by_id(&self, id: String) -> Result<Profile, DisplayError> {
-        let profiles = self.get_profiles()?;
-        profiles
-            .profiles
-            .into_iter()
-            .find(|p| p.id.as_ref() == Some(&id))
-            .ok_or(DisplayError::ProfileNotFound)
+        self.get_profile_by_stem(&id)
     }
 
     pub fn get_next_profile(&self) -> Result<Profile, DisplayError> {
-        let mut profiles = self.get_profiles()?;
-        if profiles.profiles.len() < 2 {
+        let profiles = self.load_profiles()?;
+        if profiles.len() < 2 {
             return Err(DisplayError::NotEnoughProfiles);
         }
 
-        let current_profile_id = profiles
-            .current_profile_id
-            .ok_or(DisplayError::CurrentProfileNotSet)?;
+        self.get_current_profile()?;
+        let current_stem = self.get_current_profile_stem()?;
 
         let current_index = profiles
-            .profiles
             .iter()
-            .position(|p| p.id.as_ref() == Some(&current_profile_id))
+            .position(|(stem, _)| *stem == current_stem)
             .ok_or(DisplayError::ProfileNotFound)?;
-        let next_index = (current_index + 1) % profiles.profiles.len();
+        let next_index = (current_index + 1) % profiles.len();
 
-        Ok(profiles.profiles.remove(next_index))
+        Ok(profiles.into_iter().nth(next_index).unwrap().1)
     }
 
+    // Accepts the filename stem (e.g. "pc", "tv") as the profile id.
     pub fn set_current_profile_id(&self, profile_id: String) -> Result<(), DisplayError> {
-        let mut config = self.get_profiles()?;
-        if !config
-            .profiles
-            .iter()
-            .any(|p| p.id.as_ref() == Some(&profile_id))
-        {
-            return Err(DisplayError::ProfileNotFound);
-        }
-        config.current_profile_id = Some(profile_id);
-
-        fs::write(
-            &self.config_file,
-            serde_json::to_string_pretty(&config).unwrap(),
-        )
-        .map_err(|_| DisplayError::FailedToSetConfig)?;
-
-        Ok(())
-    }
-
-    fn validate_profile(
-        &self,
-        profile: &Profile,
-        available_displays: Vec<Monitor>,
-    ) -> Option<ValidationError> {
-        for monitor_config in &profile.monitors_config.monitors {
-            let matching_display = available_displays
+        let path = self.config_dir.join(format!("{}.json", profile_id));
+        if !path.exists() {
+            // Fall back: search by display name so callers passing profile.name still work.
+            let profiles = self.load_profiles()?;
+            let stem = profiles
                 .iter()
-                .find(|d| d.name == monitor_config.name);
-
-            if matching_display.is_none() {
-                return Some(ValidationError::MonitorNotFound(
-                    monitor_config.name.clone(),
-                ));
-            }
-
-            let display = matching_display.unwrap();
-
-            if monitor_config.scale < 0.1 || monitor_config.scale > 20.0 {
-                return Some(ValidationError::InvalidScaleValue(
-                    monitor_config.name.clone(),
-                    monitor_config.scale.to_string(),
-                    "Scale must be between 0.1 and 20.0".to_string(),
-                ));
-            }
-            if Transformation::from_code(monitor_config.transformation).is_none() {
-                return Some(ValidationError::InvalidTransformationValue(
-                    monitor_config.name.clone(),
-                    monitor_config.transformation.to_string(),
-                    "Transformation must be between 0 and 7".to_string(),
-                ));
-            }
-
-            let resolution_supported = display.modes.iter().any(|mode| {
-                mode.resolution.width == monitor_config.resolution.width
-                    && mode.resolution.height == monitor_config.resolution.height
-            });
-
-            if !resolution_supported {
-                return Some(ValidationError::ResolutionNotSupported(
-                    monitor_config.name.clone(),
-                    format!(
-                        "{}x{}",
-                        monitor_config.resolution.width, monitor_config.resolution.height
-                    ),
-                    "Resolution not available for this monitor".to_string(),
-                ));
-            }
-
-            let refresh_rate_supported = display.modes.iter().any(|mode| {
-                mode.resolution.width == monitor_config.resolution.width
-                    && mode.resolution.height == monitor_config.resolution.height
-                    && mode
-                        .refresh_rate
-                        .iter()
-                        .any(|&rate| (rate as f64 - monitor_config.refresh_rate).abs() < 0.01)
-            });
-
-            if !refresh_rate_supported {
-                return Some(ValidationError::RefreshRateNotSupported(
-                    monitor_config.name.clone(),
-                    monitor_config.refresh_rate.to_string(),
-                    "Refresh rate not available for this resolution".to_string(),
-                ));
-            }
-
-            if let Some(mirror_source) = &monitor_config.mirror_of_name {
-                if mirror_source == &monitor_config.name {
-                    return Some(ValidationError::InvalidMirrorSourceName(
-                        monitor_config.name.clone(),
-                        mirror_source.clone(),
-                        "Monitor cannot mirror itself".to_string(),
-                    ));
-                }
-
-                if !profile
-                    .monitors_config.monitors
-                    .iter()
-                    .any(|m| &m.name == mirror_source)
-                {
-                    return Some(ValidationError::InvalidMirrorSourceName(
-                        monitor_config.name.clone(),
-                        mirror_source.clone(),
-                        "Mirror source monitor not found in profile".to_string(),
-                    ));
-                }
-            }
+                .find(|(_, p)| p.name == profile_id)
+                .map(|(s, _)| s.clone())
+                .ok_or(DisplayError::ProfileNotFound)?;
+            return self.save_current_profile_stem(&stem);
         }
-
-        if let Some(sink) = profile
-            .audio_sinks_config.audio_sinks
-            .iter()
-            .find(|sink| sink.volume > 150)
-        {
-            return Some(ValidationError::InvalidVolumeValue(sink.volume));
-        }
-
-        None
+        self.save_current_profile_stem(&profile_id)
     }
 }

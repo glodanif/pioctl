@@ -16,24 +16,6 @@ impl DesktopManager for HyprlandDesktopManager {
         dry_run: bool,
     ) -> Result<(), DesktopError> {
         for workspace in &desktop_config.workspaces {
-            match self.run(&["dispatch", "workspace", workspace.index.as_str()], dry_run) {
-                Ok(output) if output.status.success() => {}
-                Ok(output) => {
-                    let msg = String::from_utf8_lossy(&output.stdout);
-                    return Err(DesktopError::CommandExecutionError(format!(
-                        "Failed to switch to workspace {}: {}",
-                        workspace.index,
-                        msg.trim()
-                    )));
-                }
-                Err(e) => {
-                    return Err(DesktopError::CommandExecutionError(format!(
-                        "Failed to execute command for workspace {}: {}",
-                        workspace.index, e
-                    )));
-                }
-            }
-
             match self.run(
                 &[
                     "dispatch",
