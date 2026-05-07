@@ -1,5 +1,6 @@
 use crate::audio::audio_manager::AudioManager;
 use crate::cli::Command;
+use crate::display::desktop_manager::DesktopManager;
 use crate::display::display_manager::DisplayManager;
 use crate::notifications::notifications_manager::NotificationsManager;
 use crate::profile::{Profile, ProfilesManager};
@@ -10,6 +11,7 @@ pub struct Dispatcher<'a> {
     dry_run: bool,
     display_manager: &'a Box<dyn DisplayManager>,
     audio_manager: &'a Box<dyn AudioManager>,
+    desktop_manager: &'a Box<dyn DesktopManager>,
     profiles_manager: &'a ProfilesManager<'a>,
     notifications_manager: &'a NotificationsManager,
 }
@@ -19,6 +21,7 @@ impl<'a> Dispatcher<'a> {
         dry_run: bool,
         display_manager: &'a Box<dyn DisplayManager>,
         audio_manager: &'a Box<dyn AudioManager>,
+        desktop_manager: &'a Box<dyn DesktopManager>,
         profiles_manager: &'a ProfilesManager<'a>,
         notifications_manager: &'a NotificationsManager,
     ) -> Self {
@@ -26,6 +29,7 @@ impl<'a> Dispatcher<'a> {
             dry_run,
             display_manager,
             audio_manager,
+            desktop_manager,
             profiles_manager,
             notifications_manager,
         }
@@ -207,7 +211,6 @@ impl<'a> Dispatcher<'a> {
             ICON_ERROR
         };
         let audio_done = format!("{}{}Audio", audio_icon, ICON_SEP);
-        let desktop_done = format!("{}{}Desktop", ICON_CHECK, ICON_SEP);
 
         match audio_result {
             Ok(_) => {
@@ -225,11 +228,45 @@ impl<'a> Dispatcher<'a> {
             }
         }
 
+        let _ = self.notifications_manager.notify_update(
+            &title,
+            &format!("{}\n{}\n{}", monitors_done, audio_done, desktop_pending),
+            notification_id,
+            None,
+            self.dry_run,
+        );
+
         if let Some(delay) = profile.desktop_config.delay_before_ms {
             if self.dry_run {
                 println!("[DRY RUN] Delay before setting desktop config: {}ms", delay);
             } else {
                 thread::sleep(Duration::from_millis(delay as u64));
+            }
+        }
+
+        let desktop_result = self
+            .desktop_manager
+            .dispatch_desktops(&profile.desktop_config, self.dry_run);
+        let desktop_icon = if desktop_result.is_ok() {
+            ICON_CHECK
+        } else {
+            ICON_ERROR
+        };
+        let desktop_done = format!("{}{}Desktop", desktop_icon, ICON_SEP);
+
+        match desktop_result {
+            Ok(_) => {
+                if self.dry_run {
+                    println!(
+                        "[DRY RUN] Desktop config applied successfully: {}",
+                        profile.name
+                    );
+                } else {
+                    println!("Desktop config applied successfully: {}", profile.name);
+                }
+            }
+            Err(err) => {
+                eprintln!("Warning: Failed to apply desktop config: {}", err);
             }
         }
 

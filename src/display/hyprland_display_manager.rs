@@ -5,17 +5,18 @@ use super::mode::Mode;
 use super::monitor::Monitor;
 use super::size::Size;
 use crate::profile::monitor_config::MonitorConfig;
+use crate::profile::monitors_config::MonitorsConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::io::Error;
 use std::os::unix::process::ExitStatusExt;
-use std::process::Command;
+use std::process::{Command, ExitStatus, Output};
 use std::thread;
 use std::time::Duration;
-use crate::profile::monitors_config::MonitorsConfig;
 
 const HYPRLAND_CMD: &str = "hyprctl";
 
-pub struct HyprlandManager;
+pub struct HyprlandDisplayManager;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,71 +66,7 @@ impl From<HyprlandMonitor> for Monitor {
     }
 }
 
-fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
-    let mut modes_map: HashMap<(u32, u32), Vec<f32>> = HashMap::new();
-
-    for mode_str in mode_strings {
-        let parts: Vec<&str> = mode_str.split('@').collect();
-        if parts.len() != 2 {
-            continue;
-        }
-
-        let resolution_parts: Vec<&str> = parts[0].split('x').collect();
-        if resolution_parts.len() != 2 {
-            continue;
-        }
-
-        if let (Ok(width), Ok(height)) = (
-            resolution_parts[0].parse::<u32>(),
-            resolution_parts[1].parse::<u32>(),
-        ) {
-            let refresh_rate_str = parts[1].trim_end_matches("Hz");
-            if let Ok(refresh_rate) = refresh_rate_str.parse::<f32>() {
-                modes_map
-                    .entry((width, height))
-                    .or_insert_with(Vec::new)
-                    .push(refresh_rate);
-            }
-        }
-    }
-
-    let mut modes: Vec<Mode> = modes_map
-        .into_iter()
-        .map(|((width, height), mut refresh_rates)| {
-            refresh_rates.sort_by(|a, b| b.partial_cmp(a).unwrap());
-            Mode {
-                resolution: Size { width, height },
-                refresh_rate: refresh_rates,
-            }
-        })
-        .collect();
-
-    modes.sort_by(|a, b| {
-        b.resolution
-            .width
-            .cmp(&a.resolution.width)
-            .then_with(|| b.resolution.height.cmp(&a.resolution.height))
-    });
-
-    modes
-}
-
-impl HyprlandManager {
-    fn run(&self, args: &[&str], dry_run: bool) -> Result<std::process::Output, std::io::Error> {
-        if dry_run {
-            println!("[DRY RUN] {} {}", HYPRLAND_CMD, args.join(" "));
-            Ok(std::process::Output {
-                status: std::process::ExitStatus::from_raw(0),
-                stdout: Vec::new(),
-                stderr: Vec::new(),
-            })
-        } else {
-            Command::new(HYPRLAND_CMD).args(args).output()
-        }
-    }
-}
-
-impl DisplayManager for HyprlandManager {
+impl DisplayManager for HyprlandDisplayManager {
     fn get_monitors(&self, dry_run: bool) -> Result<Vec<Monitor>, DisplayError> {
         let output = self.run(&["monitors", "all", "-j"], dry_run).map_err(|_| {
             DisplayError::CommandExecutionError(format!(
@@ -161,7 +98,11 @@ impl DisplayManager for HyprlandManager {
         Ok(result_json)
     }
 
-    fn set_monitors_config(&self, config: &MonitorsConfig, dry_run: bool) -> Result<(), DisplayError> {
+    fn set_monitors_config(
+        &self,
+        config: &MonitorsConfig,
+        dry_run: bool,
+    ) -> Result<(), DisplayError> {
         let mut any_disabled = false;
         for monitor in &config.monitors {
             if !monitor.is_enabled {
@@ -183,12 +124,12 @@ impl DisplayManager for HyprlandManager {
                 self.set_enabled_monitor(monitor, dry_run)?;
             }
         }
-        
+
         Ok(())
     }
 }
 
-impl HyprlandManager {
+impl HyprlandDisplayManager {
     fn set_disabled_monitor(
         &self,
         monitor: &MonitorConfig,
@@ -277,4 +218,66 @@ impl HyprlandManager {
             }
         }
     }
+
+    fn run(&self, args: &[&str], dry_run: bool) -> Result<Output, Error> {
+        if dry_run {
+            println!("[DRY RUN] {} {}", HYPRLAND_CMD, args.join(" "));
+            Ok(Output {
+                status: ExitStatus::from_raw(0),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        } else {
+            Command::new(HYPRLAND_CMD).args(args).output()
+        }
+    }
+}
+
+fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
+    let mut modes_map: HashMap<(u32, u32), Vec<f32>> = HashMap::new();
+
+    for mode_str in mode_strings {
+        let parts: Vec<&str> = mode_str.split('@').collect();
+        if parts.len() != 2 {
+            continue;
+        }
+
+        let resolution_parts: Vec<&str> = parts[0].split('x').collect();
+        if resolution_parts.len() != 2 {
+            continue;
+        }
+
+        if let (Ok(width), Ok(height)) = (
+            resolution_parts[0].parse::<u32>(),
+            resolution_parts[1].parse::<u32>(),
+        ) {
+            let refresh_rate_str = parts[1].trim_end_matches("Hz");
+            if let Ok(refresh_rate) = refresh_rate_str.parse::<f32>() {
+                modes_map
+                    .entry((width, height))
+                    .or_insert_with(Vec::new)
+                    .push(refresh_rate);
+            }
+        }
+    }
+
+    let mut modes: Vec<Mode> = modes_map
+        .into_iter()
+        .map(|((width, height), mut refresh_rates)| {
+            refresh_rates.sort_by(|a, b| b.partial_cmp(a).unwrap());
+            Mode {
+                resolution: Size { width, height },
+                refresh_rate: refresh_rates,
+            }
+        })
+        .collect();
+
+    modes.sort_by(|a, b| {
+        b.resolution
+            .width
+            .cmp(&a.resolution.width)
+            .then_with(|| b.resolution.height.cmp(&a.resolution.height))
+    });
+
+    modes
 }

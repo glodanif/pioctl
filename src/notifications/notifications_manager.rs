@@ -10,16 +10,6 @@ impl NotificationsManager {
         NotificationsManager {}
     }
 
-    pub fn notify(
-        &self,
-        title: &str,
-        message: &str,
-        dry_run: bool,
-    ) -> Result<(), NotificationError> {
-        self.notify_update(title, message, None, None, dry_run)
-            .map(|_| ())
-    }
-
     pub fn notify_update(
         &self,
         title: &str,
