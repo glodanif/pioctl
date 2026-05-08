@@ -4,13 +4,11 @@ use super::display_manager::DisplayManager;
 use super::mode::Mode;
 use super::monitor::Monitor;
 use super::size::Size;
+use crate::cli::utils::run;
 use crate::profile::monitor_config::MonitorConfig;
 use crate::profile::monitors_config::MonitorsConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::io::Error;
-use std::os::unix::process::ExitStatusExt;
-use std::process::{Command, ExitStatus, Output};
 use std::thread;
 use std::time::Duration;
 
@@ -68,7 +66,7 @@ impl From<HyprlandMonitor> for Monitor {
 
 impl DisplayManager for HyprlandDisplayManager {
     fn get_monitors(&self, dry_run: bool) -> Result<Vec<Monitor>, DisplayError> {
-        let output = self.run(&["monitors", "all", "-j"], dry_run).map_err(|_| {
+        let output = run(HYPRLAND_CMD, &["monitors", "all", "-j"], dry_run).map_err(|_| {
             DisplayError::CommandExecutionError(format!(
                 "Failed to execute command {} monitors all -j",
                 HYPRLAND_CMD
@@ -136,7 +134,11 @@ impl HyprlandDisplayManager {
         dry_run: bool,
     ) -> Result<(), DisplayError> {
         let config = format!("{},disable", monitor.name);
-        match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
+        match run(
+            HYPRLAND_CMD,
+            &["keyword", "monitor", config.as_str()],
+            dry_run,
+        ) {
             Ok(output) if output.status.success() => {
                 if !dry_run {
                     println!("Successfully disabled monitor: {}", monitor.name);
@@ -180,7 +182,11 @@ impl HyprlandDisplayManager {
             monitor.current_position.height,
             monitor.scale,
         );
-        match self.run(&["keyword", "monitor", config.as_str()], dry_run) {
+        match run(
+            HYPRLAND_CMD,
+            &["keyword", "monitor", config.as_str()],
+            dry_run,
+        ) {
             Ok(output) if output.status.success() => {
                 if !dry_run {
                     println!(
@@ -216,19 +222,6 @@ impl HyprlandDisplayManager {
                     monitor.name, e
                 )))
             }
-        }
-    }
-
-    fn run(&self, args: &[&str], dry_run: bool) -> Result<Output, Error> {
-        if dry_run {
-            println!("[DRY RUN] {} {}", HYPRLAND_CMD, args.join(" "));
-            Ok(Output {
-                status: ExitStatus::from_raw(0),
-                stdout: Vec::new(),
-                stderr: Vec::new(),
-            })
-        } else {
-            Command::new(HYPRLAND_CMD).args(args).output()
         }
     }
 }

@@ -31,32 +31,45 @@ impl AudioManager for PipeWireAudioManager {
             .lines()
             .filter_map(|line| {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 { Some(parts[1].to_string()) } else { None }
+                if parts.len() >= 2 {
+                    Some(parts[1].to_string())
+                } else {
+                    None
+                }
             })
             .collect();
 
         Ok(sinks)
     }
 
-    fn set_audio_sinks_config(&self, config: &AudioSinksConfig, dry_run: bool) -> Result<(), AudioError> {
+    fn set_audio_sinks_config(
+        &self,
+        config: &AudioSinksConfig,
+        dry_run: bool,
+    ) -> Result<(), AudioError> {
         for sink in &config.audio_sinks {
             let prefix = &sink.sink_name;
             let attempts = 10;
             let mut success = false;
 
             for _ in 0..attempts {
-                let sink_name = self.find_sink_by_prefix(prefix)?;
+                if let Some(name) = self.find_sink_by_prefix(prefix)? {
+                    if sink.default {
+                        match self.set_default_sink(&name, dry_run) {
+                            Ok(()) => {
+                                println!("Set default sink to '{}'", &name);
+                            }
+                            Err(e) => eprintln!("Failed to set default sink '{}': {}", &name, e),
+                        }
+                    }
 
-                if let Some(name) = sink_name {
-                    match self.set_default_sink(&name, dry_run) {
+                    match self.set_sink_volume(&name, sink.volume, dry_run) {
                         Ok(()) => {
-                            self.set_sink_volume(&name, sink.volume, dry_run)?;
+                            println!("Set volume for sink '{}' to {}%", &name, sink.volume);
                             success = true;
                             break;
                         }
-                        Err(e) => {
-                            eprintln!("Failed to set sink '{}': {}", name, e);
-                        }
+                        Err(e) => eprintln!("Failed to set volume for sink '{}': {}", name, e),
                     }
                 }
 
@@ -127,11 +140,19 @@ impl PipeWireAudioManager {
         }
     }
 
-    fn set_sink_volume(&self, sink_name: &str, volume: u8, dry_run: bool) -> Result<(), AudioError> {
+    fn set_sink_volume(
+        &self,
+        sink_name: &str,
+        volume: u8,
+        dry_run: bool,
+    ) -> Result<(), AudioError> {
         let volume_str = format!("{}%", volume);
 
         if dry_run {
-            println!("[DRY RUN] {} set-sink-volume {} {}", PIPE_WIRE_CMD, sink_name, volume_str);
+            println!(
+                "[DRY RUN] {} set-sink-volume {} {}",
+                PIPE_WIRE_CMD, sink_name, volume_str
+            );
             return Ok(());
         }
 

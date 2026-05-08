@@ -4,4 +4,6 @@ use serde::{Deserialize, Serialize};
 pub struct AudioConfig {
     pub sink_name: String,
     pub volume: u8,
+    #[serde(default)]
+    pub default: bool,
 }
