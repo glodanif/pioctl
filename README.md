@@ -76,7 +76,8 @@ A CLI tool for applying and restoring output devices profiles (monitors and audi
     "audio_sinks": [
       {
         "sink_name": "alsa_output.usb-Focusrite_Scarlett_2i2_USB-00",
-        "volume": 75
+        "volume": 75,
+        "default": true
       }
     ]
   },
