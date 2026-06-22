@@ -172,14 +172,21 @@ impl HyprlandDisplayManager {
         monitor: &MonitorConfig,
         dry_run: bool,
     ) -> Result<(), DisplayError> {
+        let position = if monitor.auto_position {
+            "auto".to_string()
+        } else {
+            format!(
+                "{}x{}",
+                monitor.current_position.width, monitor.current_position.height
+            )
+        };
         let config = format!(
-            "{},{}x{}@{},{}x{},{}",
+            "{},{}x{}@{},{},{}",
             monitor.name,
             monitor.resolution.width,
             monitor.resolution.height,
             monitor.refresh_rate,
-            monitor.current_position.width,
-            monitor.current_position.height,
+            position,
             monitor.scale,
         );
         match run(

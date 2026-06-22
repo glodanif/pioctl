@@ -230,35 +230,35 @@ impl<'a> Dispatcher<'a> {
             }
         }
 
-        // let desktop_result = self
-        //     .desktop_manager
-        //     .dispatch_desktops(&profile.desktop_config, self.dry_run);
-        // let desktop_icon = if desktop_result.is_ok() {
-        //     ICON_CHECK
-        // } else {
-        //     ICON_ERROR
-        // };
-        // let desktop_done = format!("{}{}Desktop", desktop_icon, ICON_SEP);
+        let desktop_result = self
+            .desktop_manager
+            .dispatch_desktops(&profile.desktop_config, self.dry_run);
+        let desktop_icon = if desktop_result.is_ok() {
+            ICON_CHECK
+        } else {
+            ICON_ERROR
+        };
+        let desktop_done = format!("{}{}Desktop", desktop_icon, ICON_SEP);
 
-        // match desktop_result {
-        //     Ok(_) => {
-        //         if self.dry_run {
-        //             println!(
-        //                 "[DRY RUN] Desktop config applied successfully: {}",
-        //                 profile.name
-        //             );
-        //         } else {
-        //             println!("Desktop config applied successfully: {}", profile.name);
-        //         }
-        //     }
-        //     Err(err) => {
-        //         eprintln!("Warning: Failed to apply desktop config: {}", err);
-        //     }
-        // }
+        match desktop_result {
+            Ok(_) => {
+                if self.dry_run {
+                    println!(
+                        "[DRY RUN] Desktop config applied successfully: {}",
+                        profile.name
+                    );
+                } else {
+                    println!("Desktop config applied successfully: {}", profile.name);
+                }
+            }
+            Err(err) => {
+                eprintln!("Warning: Failed to apply desktop config: {}", err);
+            }
+        }
 
         let _ = self.notifications_manager.notify_update(
             &title,
-            &format!("{}\n{}", monitors_done, audio_done),
+            &format!("{}\n{}\n{}", monitors_done, audio_done, desktop_done),
             notification_id,
             Some(3000),
             self.dry_run,

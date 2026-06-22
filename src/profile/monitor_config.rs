@@ -10,5 +10,7 @@ pub struct MonitorConfig {
     pub refresh_rate: f64,
     pub is_enabled: bool,
     pub mirror_of_name: Option<String>,
+    #[serde(default)]
+    pub auto_position: bool,
     pub current_position: Size,
 }
